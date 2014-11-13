@@ -5,6 +5,8 @@ import itertools
 import json
 from scrapy import Selector
 from groupon.items import GrouponItem
+from scrapy import Request
+from urlparse import urljoin
 
 
 class GrouponSpiderSpider(scrapy.Spider):
@@ -27,7 +29,6 @@ class GrouponSpiderSpider(scrapy.Spider):
         ['washington-dc', 'washington dc'],
         ['phoenix', 'phoenix']
     ]
-
 
     deal_pages = [
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=hair-salons'],
@@ -56,7 +57,6 @@ class GrouponSpiderSpider(scrapy.Spider):
         ['Activities', 'http://www.groupon.com/browse/deals/partial?address=%s?category=things-to-do&category2=sightseeing']
     ]
 
-
     def __init__(self, *a, **kw):
         super(GrouponSpiderSpider, self).__init__(*a, **kw)
         self.start_urls = self.start_urls_generator()
@@ -73,21 +73,26 @@ class GrouponSpiderSpider(scrapy.Spider):
             self.log("Exception raised during json load: %s" % response.url, log.DEBUG)
             deals_info = {'body': response.body}
 
-        for key, string in deals_info.iteritems():
-            sel = Selector(text=string)
-
-            for node in sel.xpath('//*/figure[contains(@class,"deal-card")]'):
-                base_item = GrouponItem()
-                for key, xpath in {
+        for string in deals_info.values():
+            for node in Selector(text=string).xpath('//*/figure[contains(@class,"deal-card")]'):
+                base_item = GrouponItem('Today')
+                for field, xpath in {
                     'url': 'a/@href',
                     'small_image': 'a/img/@data-original',
                     'title': './/p[contains(@class,"deal-title")]/text()',
                     'merchant_name': './/p[contains(@class,"merchant-name")]/text()',
                 }.iteritems():
-                    base_item[key] = node.xpath(xpath).extract().pop()
+                    base_item[field] = node.xpath(xpath).extract().pop()
 
                 base_item['description'] = ' '.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
-                price = node.xpath('.//div[contains(@class,"discount-price")]//text()').extract()
-                base_item['price'] = price.pop() if price else "View price"
+                base_item['price'] = (node.xpath('.//div[contains(@class,"discount-price")]//text()').extract() or ["View price"]).pop()
+                base_item['url'] = urljoin(response.url, base_item['url'])
 
-                yield base_item
+                yield Request(
+                    base_item['url'],
+                    meta={'base_item': base_item},
+                    callback=self.parse_deal)
+
+    def parse_deal(self, response):
+        self.log("parsing deal page: %s" % response.url, log.INFO)
+        yield response.meta['base_item']
