@@ -4,6 +4,7 @@ from scrapy import log
 import itertools
 import json
 from scrapy import Selector
+from groupon.items import GrouponItem
 
 
 class GrouponSpiderSpider(scrapy.Spider):
@@ -76,14 +77,17 @@ class GrouponSpiderSpider(scrapy.Spider):
             sel = Selector(text=string)
 
             for node in sel.xpath('//*/figure[contains(@class,"deal-card")]'):
-                for val, xpath in {
-                    "href": 'a/@href',
-                    "image": 'a/img/@data-original',
-                    "title": './/p[contains(@class,"deal-title")]/text()',
-                    "merchant": './/p[contains(@class,"merchant-name")]/text()',
+                base_item = GrouponItem()
+                for key, xpath in {
+                    'url': 'a/@href',
+                    'small_image': 'a/img/@data-original',
+                    'title': './/p[contains(@class,"deal-title")]/text()',
+                    'merchant_name': './/p[contains(@class,"merchant-name")]/text()',
                 }.iteritems():
-                    self.log("found %s: %s" % (val, node.xpath(xpath).extract().pop()), log.DEBUG)
+                    base_item[key] = node.xpath(xpath).extract().pop()
 
-                self.log("found description: %s" % '\n'.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()), log.DEBUG)
+                base_item['description'] = ' '.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
                 price = node.xpath('.//div[contains(@class,"discount-price")]//text()').extract()
-                self.log("found price: %s" % price.pop() if price else "View price", log.DEBUG)
+                base_item['price'] = price.pop() if price else "View price"
+
+                yield base_item
