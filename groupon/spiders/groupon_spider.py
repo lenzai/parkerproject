@@ -10,6 +10,25 @@ from urlparse import urljoin
 import re
 from random import random
 from datetime import datetime
+# unknown directive...
+import sys
+sys.dont_write_bytecode = True
+# legacy code
+try:
+    from pymongo.mongo_replica_set_client import MongoReplicaSetClient
+    import os
+
+    MONGO_URL = os.environ['boxedsales_mongo_url']
+    mongo_set = True
+
+    client = MongoReplicaSetClient(MONGO_URL, replicaSet='set-543c2c03128e2799a7007378')
+    db = client.Boxedsales
+    dealsCollection = db.deals
+    cronCollection = db.cron
+
+    db_import_success = True
+except ImportError:
+    db_import_success = False
 
 
 class GrouponSpiderSpider(scrapy.Spider):
@@ -33,7 +52,7 @@ class GrouponSpiderSpider(scrapy.Spider):
         ['phoenix', 'phoenix']
     ]
 
-    category_to_urls = [
+    deals_categories_urls = [
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=hair-salons'],
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=hair-removal'],
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=nail-salons'],
@@ -66,7 +85,7 @@ class GrouponSpiderSpider(scrapy.Spider):
         self.insert_date = datetime.now()
 
     def start_requests(self):
-        for url, location in itertools.product(self.category_to_urls, self.location_data):
+        for url, location in itertools.product(self.deals_categories_urls, self.location_data):
             meta = {'category_name': url[0], 'merchant_locality': location[1]}
             yield Request(url[1] % location[0],
                           meta=meta)
@@ -128,11 +147,12 @@ class GrouponSpiderSpider(scrapy.Spider):
             item['phone'] = ''
             item['merchant_address'] = ''
 
-        # if item['price'] != 'View price':
-        #     dealsCollection.update({"title": item['title']}, item, upsert=True)
-        #     cronCollection.update({"batch_id": self.cron_id},
-        #                           {"batch_id": self.cron_id, "network": "Groupon", "cron_date": self.insert_date},
-        #                           upsert=True)
-        #     self.log('inserted deal', log.INFO)  # from original print
+        # legacy code - untested and should probably be rewritten in a feed exporter
+        if db_import_success and item['price'] != 'View price':
+            dealsCollection.update({"title": item['title']}, item, upsert=True)
+            cronCollection.update({"batch_id": self.cron_id},
+                                  {"batch_id": self.cron_id, "network": "Groupon", "cron_date": self.insert_date},
+                                  upsert=True)
+            self.log('inserted deal', log.INFO)  # from original print
 
         yield item
