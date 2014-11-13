@@ -7,6 +7,7 @@ from scrapy import Selector
 from groupon.items import GrouponItem
 from scrapy import Request
 from urlparse import urljoin
+import re
 
 
 class GrouponSpiderSpider(scrapy.Spider):
@@ -73,9 +74,9 @@ class GrouponSpiderSpider(scrapy.Spider):
             self.log("Exception raised during json load: %s" % response.url, log.DEBUG)
             deals_info = {'body': response.body}
 
-        for string in deals_info.values():
-            for node in Selector(text=string).xpath('//*/figure[contains(@class,"deal-card")]'):
-                base_item = GrouponItem('Today')
+        for key, string in deals_info.iteritems():
+            for idx, node in enumerate(Selector(text=string).xpath('//*/figure[contains(@class,"deal-card")]')):
+                base_item = GrouponItem('cron_date')
                 for field, xpath in {
                     'url': 'a/@href',
                     'small_image': 'a/img/@data-original',
@@ -84,15 +85,40 @@ class GrouponSpiderSpider(scrapy.Spider):
                 }.iteritems():
                     base_item[field] = node.xpath(xpath).extract().pop()
 
-                base_item['description'] = ' '.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
+                base_item['description'] = ','.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
                 base_item['price'] = (node.xpath('.//div[contains(@class,"discount-price")]//text()').extract() or ["View price"]).pop()
                 base_item['url'] = urljoin(response.url, base_item['url'])
 
+                # self.log("loop%d in %s" % (idx, key), log.INFO)  # from original print
                 yield Request(
                     base_item['url'],
                     meta={'base_item': base_item},
                     callback=self.parse_deal)
 
     def parse_deal(self, response):
-        self.log("parsing deal page: %s" % response.url, log.INFO)
-        yield response.meta['base_item']
+        sel = Selector(response)
+        item = response.meta['base_item']
+
+        item['savings'] = (sel.xpath('//*[@id="discount-percent"]/text()').extract() or ['N/A']).pop().strip()
+        item['large_image'] = (sel.xpath('//*[@id="featured-image"]/@src').extract() or [None]).pop()
+        item['expires_at'] = ' '.join(sel.xpath('//*[contains(@class,"limited-time")]//text()').extract() or
+                                      sel.xpath('//*[contains(@class,"countdown-timer")]//text()').extract() or
+                                      ['Ongoing']).strip()
+
+        address_node = (sel.xpath('//*[contains(@class,"address")]') or [None]).pop()
+        if address_node:
+            add_node_text = address_node.xpath('.//p//text()').extract()
+            last_line = (add_node_text or [''])[-1]
+            if re.match(r'^\D*(\d{3})\D*(\d{3})\D*(\d{4})\D*(\d*)$', last_line, re.M | re.I):
+                item['phone'] = last_line
+                item['merchant_address'] = '\n'.join(add_node_text[:-1]).strip()
+            else:
+                # self.log("phone doesnt exist", log.INFO)  # from original print
+                item['phone'] = ''
+                # if phone is not available, address should be dropped ?!
+                item['merchant_address'] = '\n'.join(add_node_text).strip()
+        else:
+            item['phone'] = ''
+            item['merchant_address'] = ''
+
+        yield item

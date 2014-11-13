@@ -13,6 +13,8 @@ class GrouponBaseItem(Item):
     # init
     provider_name = Field()
     insert_date = Field()
+    category_name = Field()
+    merchant_locality = Field()
     # first pass
     url = Field()
     small_image = Field()
@@ -23,9 +25,7 @@ class GrouponBaseItem(Item):
     # second pass
     large_image = Field()
     savings = Field()
-    category_name = Field()
     merchant_address = Field()
-    merchant_locality = Field()
     expires_at = Field()
     phone = Field()
 

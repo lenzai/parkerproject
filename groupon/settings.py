@@ -18,8 +18,9 @@ CONCURRENT_REQUESTS_PER_IP = 2
 DOWNLOAD_DELAY = 10
 DOWNLOAD_TIMEOUT = 60
 
-# for debugging
 HTTPCACHE_ENABLED = True
+# for debugging - no need to parse too many items
+HTTPCACHE_IGNORE_MISSING = True
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 USER_AGENT = 'groupon (+http://www.yourdomain.com)'
