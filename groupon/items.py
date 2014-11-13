@@ -31,7 +31,9 @@ class GrouponBaseItem(Item):
 
 
 class GrouponItem(GrouponBaseItem):
-    def __init__(self, date, *a, **kwargs):
+    def __init__(self, date, category, city, *a, **kwargs):
         super(GrouponItem, self).__init__(*a, **kwargs)
         self['provider_name'] = 'Groupon'
         self['insert_date'] = date
+        self['category_name'] = category
+        self['merchant_locality'] = city

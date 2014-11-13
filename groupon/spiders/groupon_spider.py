@@ -8,12 +8,14 @@ from groupon.items import GrouponItem
 from scrapy import Request
 from urlparse import urljoin
 import re
+from random import random
+from datetime import datetime
 
 
 class GrouponSpiderSpider(scrapy.Spider):
     name = "groupon_spider"
     allowed_domains = ["groupon.com"]
-    locations = [
+    location_data = [
         ['new-york-city', 'new york'],
         ['manhattan', 'new york'],
         ['boston', 'boston'],
@@ -31,7 +33,7 @@ class GrouponSpiderSpider(scrapy.Spider):
         ['phoenix', 'phoenix']
     ]
 
-    deal_pages = [
+    category_to_urls = [
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=hair-salons'],
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=hair-removal'],
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=nail-salons'],
@@ -60,11 +62,14 @@ class GrouponSpiderSpider(scrapy.Spider):
 
     def __init__(self, *a, **kw):
         super(GrouponSpiderSpider, self).__init__(*a, **kw)
-        self.start_urls = self.start_urls_generator()
+        self.cron_id = random()
+        self.insert_date = datetime.now()
 
-    def start_urls_generator(self):
-        for url, location in itertools.product(self.deal_pages, self.locations):
-            yield url[1] % location[0]
+    def start_requests(self):
+        for url, location in itertools.product(self.category_to_urls, self.location_data):
+            meta = {'category_name': url[0], 'merchant_locality': location[1]}
+            yield Request(url[1] % location[0],
+                          meta=meta)
 
     def parse(self, response):
         try:
@@ -76,7 +81,9 @@ class GrouponSpiderSpider(scrapy.Spider):
 
         for key, string in deals_info.iteritems():
             for idx, node in enumerate(Selector(text=string).xpath('//*/figure[contains(@class,"deal-card")]')):
-                base_item = GrouponItem('cron_date')
+                base_item = GrouponItem(self.insert_date,
+                                        response.meta['category_name'],
+                                        response.meta['merchant_locality'])
                 for field, xpath in {
                     'url': 'a/@href',
                     'small_image': 'a/img/@data-original',
@@ -120,5 +127,12 @@ class GrouponSpiderSpider(scrapy.Spider):
         else:
             item['phone'] = ''
             item['merchant_address'] = ''
+
+        # if item['price'] != 'View price':
+        #     dealsCollection.update({"title": item['title']}, item, upsert=True)
+        #     cronCollection.update({"batch_id": self.cron_id},
+        #                           {"batch_id": self.cron_id, "network": "Groupon", "cron_date": self.insert_date},
+        #                           upsert=True)
+        #     self.log('inserted deal', log.INFO)  # from original print
 
         yield item
