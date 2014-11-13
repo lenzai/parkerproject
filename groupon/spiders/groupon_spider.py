@@ -2,6 +2,8 @@
 import scrapy
 from scrapy import log
 import itertools
+import json
+from scrapy import Selector
 
 
 class GrouponSpiderSpider(scrapy.Spider):
@@ -45,7 +47,7 @@ class GrouponSpiderSpider(scrapy.Spider):
         ['Health', 'http://www.groupon.com/browse/deals/partial?address=%s?category=health-and-fitness&category2=vision'],
         ['Services', 'http://www.groupon.com/local/%s/home-improvement'],
         ['Services', 'http://www.groupon.com/local/%s/local-services'],
-        ['Shopping','http://www.groupon.com/local/%s/shopping'],
+        ['Shopping', 'http://www.groupon.com/local/%s/shopping'],
         ['Activities', 'http://www.groupon.com/browse/deals/partial?address=%s?category=things-to-do&category2=activities'],
         ['Activities', 'http://www.groupon.com/browse/deals/partial?address=%s?category=things-to-do&category2=classes'],
         ['Activities', 'http://www.groupon.com/browse/deals/partial?address=%s?category=things-to-do&category2=nightlife'],
@@ -63,4 +65,26 @@ class GrouponSpiderSpider(scrapy.Spider):
             yield url[1] % location[0]
 
     def parse(self, response):
-        self.log("Parsing page: %s" % response.url, log.DEBUG)
+        try:
+            deals_info = json.loads(response.body).get('deals', {})
+        except Exception as e:
+            self.log("Exception raised during json load: %s" % str(e), log.ERROR)
+            deals_info = {}
+
+        for key, val in deals_info.iteritems():
+            if key == 'metadata':
+                continue
+            sel = Selector(text=val)
+
+            for node in sel.xpath('//*/figure[contains(@class,"deal-card")]'):
+                for val, xpath in {
+                    "href": 'a/@href',
+                    "image": 'a/img/@data-original',
+                    "title": './/p[contains(@class,"deal-title")]/text()',
+                    "merchant": './/p[contains(@class,"merchant-name")]/text()',
+                }.iteritems():
+                    self.log("found %s: %s" % (val, node.xpath(xpath).extract().pop()), log.DEBUG)
+
+                self.log("found description: %s" % '\n'.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()), log.DEBUG)
+                price = node.xpath('.//div[contains(@class,"discount-price")]//text()').extract()
+                self.log("found price: %s" % price.pop() if price else "View price", log.DEBUG)
