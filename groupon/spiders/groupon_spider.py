@@ -67,14 +67,13 @@ class GrouponSpiderSpider(scrapy.Spider):
     def parse(self, response):
         try:
             deals_info = json.loads(response.body).get('deals', {})
-        except Exception as e:
-            self.log("Exception raised during json load: %s" % str(e), log.ERROR)
-            deals_info = {}
+            deals_info.pop('metadata', None)
+        except ValueError:
+            self.log("Exception raised during json load: %s" % response.url, log.DEBUG)
+            deals_info = {'body': response.body}
 
-        for key, val in deals_info.iteritems():
-            if key == 'metadata':
-                continue
-            sel = Selector(text=val)
+        for key, string in deals_info.iteritems():
+            sel = Selector(text=string)
 
             for node in sel.xpath('//*/figure[contains(@class,"deal-card")]'):
                 for val, xpath in {
