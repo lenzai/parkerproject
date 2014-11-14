@@ -118,7 +118,7 @@ class GrouponSpiderSpider(scrapy.Spider):
 
                 base_item['description'] = ','.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
                 # testing did no show any price. Need to fix the xpath ?!
-                base_item['price'] = (node.xpath('.//div[contains(@class,"discount-price")]//text()').extract() or ["View price"]).pop()
+                base_item['price'] = (node.xpath('.//s[contains(@class,"discount-price")]//text()').extract() or ["View price"]).pop()
                 base_item['url'] = urljoin(response.url, base_item['url'])
 
                 self.log("loop%d in %s" % (idx, key), log.INFO)  # from original print
@@ -157,13 +157,5 @@ class GrouponSpiderSpider(scrapy.Spider):
         else:
             item['phone'] = ''
             item['merchant_address'] = ''
-
-        # legacy code - untested and should probably be rewritten in a feed exporter
-        if db_import_success and item['price'] != 'View price':
-            dealsCollection.update({"title": item['title']}, item, upsert=True)
-            cronCollection.update({"batch_id": self.cron_id},
-                                  {"batch_id": self.cron_id, "network": "Groupon", "cron_date": self.insert_date},
-                                  upsert=True)
-            self.log('inserted deal', log.INFO)  # from original print
 
         yield item
