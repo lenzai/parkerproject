@@ -1,2 +1,6 @@
 *.pyc
 *~
+*.csv
+.scrapy/*
+*#
+*.bak
