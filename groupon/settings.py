@@ -18,9 +18,13 @@ CONCURRENT_REQUESTS_PER_IP = 2
 DOWNLOAD_DELAY = 10
 DOWNLOAD_TIMEOUT = 60
 
-HTTPCACHE_ENABLED = True
+# to use with caution
+# empirically, redirect only used for wrong URL
+REDIRECT_ENABLED = False
+
 # for debugging - no need to parse too many items
-HTTPCACHE_IGNORE_MISSING = True
+HTTPCACHE_ENABLED = True
+# HTTPCACHE_IGNORE_MISSING = True
 
 # Crawl responsibly by identifying yourself (and your website) on the user-agent
 USER_AGENT = 'groupon (+http://www.yourdomain.com)'

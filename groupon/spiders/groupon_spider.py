@@ -52,6 +52,7 @@ class GrouponSpiderSpider(scrapy.Spider):
         ['phoenix', 'phoenix']
     ]
 
+    # alternative: use urlencode to build the queries (including page value)
     deals_categories_urls = [
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=hair-salons'],
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=hair-removal'],
@@ -59,7 +60,7 @@ class GrouponSpiderSpider(scrapy.Spider):
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=cosmetic-procedures'],
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=skin-care'],
         ['Beauty', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=salons'],
-        ['Spas', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=spa&page='],
+        ['Spas', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=spa'],
         ['Spas', 'http://www.groupon.com/browse/deals/partial?address=%s?category=beauty-and-spas&category2=massage'],
         ['Food, Drinks', 'http://www.groupon.com/browse/deals/partial?address=%s?category=food-and-drink'],
         ['Fitness', 'http://www.groupon.com/browse/deals/partial?address=%s?category=health-and-fitness&category2=gyms'],
@@ -87,16 +88,20 @@ class GrouponSpiderSpider(scrapy.Spider):
     def start_requests(self):
         for url, location in itertools.product(self.deals_categories_urls, self.location_data):
             meta = {'category_name': url[0], 'merchant_locality': location[1]}
-            yield Request(url[1] % location[0],
-                          meta=meta)
+            yield Request(url[1] % location[0], meta=meta)
+            # straight forward approach to depth search
+            if url[1].startswith('http://www.groupon.com/browse/deals/partial?'):
+                for page in range(2, 6):
+                    yield Request(url[1] % location[0] + '&page=%d' % page, meta=meta)
 
     def parse(self, response):
         try:
             deals_info = json.loads(response.body).get('deals', {})
-            deals_info.pop('metadata', None)
+            metadata = deals_info.pop('metadata', {})
         except ValueError:
             self.log("Exception raised during json load: %s" % response.url, log.DEBUG)
             deals_info = {'body': response.body}
+            metadata = {}
 
         for key, string in deals_info.iteritems():
             for idx, node in enumerate(Selector(text=string).xpath('//*/figure[contains(@class,"deal-card")]')):
@@ -112,14 +117,20 @@ class GrouponSpiderSpider(scrapy.Spider):
                     base_item[field] = node.xpath(xpath).extract().pop()
 
                 base_item['description'] = ','.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
+                # testing did no show any price. Need to fix the xpath ?!
                 base_item['price'] = (node.xpath('.//div[contains(@class,"discount-price")]//text()').extract() or ["View price"]).pop()
                 base_item['url'] = urljoin(response.url, base_item['url'])
 
-                # self.log("loop%d in %s" % (idx, key), log.INFO)  # from original print
+                self.log("loop%d in %s" % (idx, key), log.INFO)  # from original print
                 yield Request(
                     base_item['url'],
                     meta={'base_item': base_item},
                     callback=self.parse_deal)
+
+        # alternative to complete depth search:
+            # - metadata contains information on pages & number of available items, but it doesnt seem usable
+            # - sending request for another page after successfully parsing a json response will provide the
+            # most complete data, at the cost of 1 extra page downloaded indicated that the last request failed
 
     def parse_deal(self, response):
         sel = Selector(response)
@@ -139,7 +150,7 @@ class GrouponSpiderSpider(scrapy.Spider):
                 item['phone'] = last_line
                 item['merchant_address'] = '\n'.join(add_node_text[:-1]).strip()
             else:
-                # self.log("phone doesnt exist", log.INFO)  # from original print
+                self.log("phone doesnt exist", log.INFO)  # from original print
                 item['phone'] = ''
                 # if phone is not available, address should be dropped ?!
                 item['merchant_address'] = '\n'.join(add_node_text).strip()
