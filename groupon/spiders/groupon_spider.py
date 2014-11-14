@@ -11,24 +11,6 @@ import re
 from random import random
 from datetime import datetime
 # unknown directive...
-import sys
-sys.dont_write_bytecode = True
-# legacy code
-try:
-    from pymongo.mongo_replica_set_client import MongoReplicaSetClient
-    import os
-
-    MONGO_URL = os.environ['boxedsales_mongo_url']
-    mongo_set = True
-
-    client = MongoReplicaSetClient(MONGO_URL, replicaSet='set-543c2c03128e2799a7007378')
-    db = client.Boxedsales
-    dealsCollection = db.deals
-    cronCollection = db.cron
-
-    db_import_success = True
-except ImportError:
-    db_import_success = False
 
 
 class GrouponSpiderSpider(scrapy.Spider):
