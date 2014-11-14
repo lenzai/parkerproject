@@ -28,3 +28,5 @@ class GrouponItem(Item):
     merchant_address = Field()
     expires_at = Field()
     phone = Field()
+    def __repr__(self):
+        return '{Groupon %s: %s [%s] "%s"}' % (self['merchant_locality'], self['price'], self['merchant_name'], self['title'])
