@@ -88,44 +88,52 @@ class GrouponSpiderSpider(scrapy.Spider):
     def start_requests(self):
         for url, location in itertools.product(self.deals_categories_urls, self.location_data):
             meta = {'category_name': url[0], 'merchant_locality': location[1]}
-            yield Request(url[1] % location[0], meta=meta)
-            # straight forward approach to depth search
-            if url[1].startswith('http://www.groupon.com/browse/deals/partial?'):
+            url = url[1]
+            location = location[0]
+            if url.startswith('http://www.groupon.com/local/'):
+                yield Request(url % location, meta=meta, callback=self.parse_deallist)
+            elif url.startswith('http://www.groupon.com/browse/deals/partial?'):
+                yield Request(url % location, meta=meta, callback=self.parse_json_deallist)
+                # straight forward approach to depth search
                 for page in range(2, 6):
-                    yield Request(url[1] % location[0] + '&page=%d' % page, meta=meta)
+                    yield Request(url % location + '&page=%d' % page, meta=meta, callback=self.parse_json_deallist)
+            else:
+                raise Exception('unexpected URL path %s' % url)
 
-    def parse(self, response):
-        try:
-            deals_info = json.loads(response.body).get('deals', {})
-            metadata = deals_info.pop('metadata', {})
-        except ValueError:
-            self.log("Exception raised during json load: %s" % response.url, log.DEBUG)
-            deals_info = {'body': response.body}
-            metadata = {}
+    def parse_json_deallist(self, response):
+        assert 'application/json; charset=utf-8' == response.headers['Content-Type']
+        deals_info = json.loads(response.body).get('deals', {})
+        metadata = deals_info.pop('metadata', {})
+        for idx, html in deals_info.iteritems():
+            assert idx in ['dealsHtml', 'featuredHtml']
+            from scrapy.http import HtmlResponse
+            response = HtmlResponse(url=response.url, request=response.request, body=html.encode('utf-8'))
+            for result in self.parse_deallist(response):
+                yield result
 
-        for key, string in deals_info.iteritems():
-            for idx, node in enumerate(Selector(text=string).xpath('//*/figure[contains(@class,"deal-card")]')):
-                base_item = GrouponItem(self.insert_date,
-                                        response.meta['category_name'],
-                                        response.meta['merchant_locality'])
-                for field, xpath in {
-                    'url': 'a/@href',
-                    'small_image': 'a/img/@data-original',
-                    'title': './/p[contains(@class,"deal-title")]/text()',
-                    'merchant_name': './/p[contains(@class,"merchant-name")]/text()',
-                }.iteritems():
-                    base_item[field] = node.xpath(xpath).extract().pop()
+    def parse_deallist(self, response):
+        selector = Selector(response)
+        for idx, node in enumerate(selector.xpath('//*/figure[contains(@class,"deal-card")]')):
+            base_item = GrouponItem(self.insert_date,
+                                    response.meta['category_name'],
+                                    response.meta['merchant_locality'])
+            for field, xpath in {
+                'url': 'a/@href',
+                'small_image': 'a/img/@data-original',
+                'title': './/p[contains(@class,"deal-title")]/text()',
+                'merchant_name': './/p[contains(@class,"merchant-name")]/text()',
+            }.iteritems():
+                base_item[field] = node.xpath(xpath).extract().pop()
 
-                base_item['description'] = ','.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
-                # testing did no show any price. Need to fix the xpath ?!
-                base_item['price'] = (node.xpath('.//s[contains(@class,"discount-price")]//text()').extract() or ["View price"]).pop()
-                base_item['url'] = urljoin(response.url, base_item['url'])
+            base_item['description'] = ','.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
+            # testing did no show any price. Need to fix the xpath ?!
+            base_item['price'] = (node.xpath('.//s[contains(@class,"discount-price")]//text()').extract() or ["View price"]).pop()
+            base_item['url'] = urljoin(response.url, base_item['url'])
 
-                self.log("loop%d in %s" % (idx, key), log.INFO)  # from original print
-                yield Request(
-                    base_item['url'],
-                    meta={'base_item': base_item},
-                    callback=self.parse_deal)
+            yield Request(
+                base_item['url'],
+                meta={'base_item': base_item},
+                callback=self.parse_deal)
 
         # alternative to complete depth search:
             # - metadata contains information on pages & number of available items, but it doesnt seem usable
