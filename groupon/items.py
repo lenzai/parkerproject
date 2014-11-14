@@ -9,7 +9,7 @@ from scrapy import Item
 from scrapy import Field
 
 
-class GrouponBaseItem(Item):
+class GrouponItem(Item):
     # init
     provider_name = Field()
     insert_date = Field()
@@ -28,12 +28,3 @@ class GrouponBaseItem(Item):
     merchant_address = Field()
     expires_at = Field()
     phone = Field()
-
-
-class GrouponItem(GrouponBaseItem):
-    def __init__(self, date, category, city, *a, **kwargs):
-        super(GrouponItem, self).__init__(*a, **kwargs)
-        self['provider_name'] = 'Groupon'
-        self['insert_date'] = date
-        self['category_name'] = category
-        self['merchant_locality'] = city

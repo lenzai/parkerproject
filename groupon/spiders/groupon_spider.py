@@ -112,28 +112,28 @@ class GrouponSpiderSpider(scrapy.Spider):
                 yield result
 
     def parse_deallist(self, response):
-        selector = Selector(response)
-        for idx, node in enumerate(selector.xpath('//*/figure[contains(@class,"deal-card")]')):
-            base_item = GrouponItem(self.insert_date,
-                                    response.meta['category_name'],
-                                    response.meta['merchant_locality'])
+        base_item = GrouponItem(
+            insert_date=self.insert_date,
+            category_name=response.meta['category_name'],
+            merchant_locality=response.meta['merchant_locality'],
+            provider_name='Groupon',
+        )
+        for idx, node in enumerate(response.selector.xpath('//*/figure[contains(@class,"deal-card")]')):
+            item = GrouponItem(base_item)
             for field, xpath in {
                 'url': 'a/@href',
                 'small_image': 'a/img/@data-original',
                 'title': './/p[contains(@class,"deal-title")]/text()',
                 'merchant_name': './/p[contains(@class,"merchant-name")]/text()',
             }.iteritems():
-                base_item[field] = node.xpath(xpath).extract().pop()
+                item[field] = node.xpath(xpath).extract().pop()
 
-            base_item['description'] = ','.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
+            item['description'] = ','.join(node.xpath('.//div[contains(@class,"description")]//text()').extract()).strip()
             # testing did no show any price. Need to fix the xpath ?!
-            base_item['price'] = (node.xpath('.//s[contains(@class,"discount-price")]//text()').extract() or ["View price"]).pop()
-            base_item['url'] = urljoin(response.url, base_item['url'])
+            item['price'] = (node.xpath('.//s[contains(@class,"discount-price")]//text()').extract() or ["View price"]).pop()
+            item['url'] = urljoin(response.url, item['url'])
 
-            yield Request(
-                base_item['url'],
-                meta={'base_item': base_item},
-                callback=self.parse_deal)
+            yield Request(item['url'], meta={'item': item}, callback=self.parse_deal)
 
         # alternative to complete depth search:
             # - metadata contains information on pages & number of available items, but it doesnt seem usable
@@ -141,9 +141,8 @@ class GrouponSpiderSpider(scrapy.Spider):
             # most complete data, at the cost of 1 extra page downloaded indicated that the last request failed
 
     def parse_deal(self, response):
+        item = response.meta['item']
         sel = Selector(response)
-        item = response.meta['base_item']
-
         item['savings'] = (sel.xpath('//*[@id="discount-percent"]/text()').extract() or ['N/A']).pop().strip()
         item['large_image'] = (sel.xpath('//*[@id="featured-image"]/@src').extract() or [None]).pop()
         item['expires_at'] = ' '.join(sel.xpath('//*[contains(@class,"limited-time")]//text()').extract() or
