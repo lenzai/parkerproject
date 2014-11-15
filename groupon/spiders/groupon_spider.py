@@ -87,7 +87,7 @@ class GrouponSpiderSpider(scrapy.Spider):
         deals_info = json.loads(response.body).get('deals', {})
         metadata = deals_info.pop('metadata', {})
         for idx, html in deals_info.iteritems():
-            assert idx in ['dealsHtml', 'featuredHtml']
+            assert idx in ['dealsHtml', 'featuredHtml', 'featuredListViewHtml'], "failed with '%s'" % idx
             from scrapy.http import HtmlResponse
             response = HtmlResponse(url=response.url, request=response.request, body=html.encode('utf-8'))
             for result in self.parse_deallist(response):
